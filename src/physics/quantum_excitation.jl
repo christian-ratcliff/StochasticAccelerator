@@ -47,16 +47,17 @@ function apply_process!(
     process::QuantumExcitation, 
     particles::StructArray{Particle{T}},
     params::SimulationParameters,
-    buffers::SimulationBuffers{T}
-) where T<:Float64
+    buffers::SimulationBuffers{S}
+    ) where {T<:Float64, S}
     
     # Get process parameters
     E0 = process.E0
     radius = process.radius
     σ_E0 = process.σ_E0
     
-    # Generate random values (reusing existing buffer)
-    randn!(MersenneTwister(Int(round(rand()*100))), buffers.random_buffer)
+    # Create a temporary Float64 buffer for random values
+    temp_random = Vector{Float64}(undef, length(buffers.random_buffer))
+    randn!(MersenneTwister(Int(round(rand()*100))), temp_random)
     
     # Check if any parameter is a StochasticTriple
     is_stochastic = any(p -> typeof(p) <: StochasticTriple, [E0, radius])
@@ -73,8 +74,12 @@ function apply_process!(
         
         # Apply to each particle with proper StochasticTriple handling
         for i in 1:length(particles)
-            # Use randst for differentiable random sampling
-            kick = randst(Normal(0.0, excitation))
+            # Use StochasticAD.propagate for the random kick
+            kick = StochasticAD.propagate(
+                (exc, r) -> exc * r,
+                excitation, 
+                temp_random[i]
+            )
             
             # Add kick to energy with proper gradient propagation
             particles.coordinates.ΔE[i] = StochasticAD.propagate(
@@ -89,7 +94,7 @@ function apply_process!(
         excitation = sqrt(1-(1-∂U_∂E)^2) * σ_E0
         
         # Apply kicks to all particles
-        particles.coordinates.ΔE .+= excitation .* buffers.random_buffer
+        particles.coordinates.ΔE .+= excitation .* temp_random
     end
     
     return nothing

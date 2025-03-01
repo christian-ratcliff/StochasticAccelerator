@@ -24,7 +24,7 @@ Calculate the gradient of a figure of merit with respect to model parameters.
 - Gradient vector
 """
 function calculate_gradient(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function
 )
     # Create StochasticModel
@@ -52,7 +52,7 @@ Calculate the gradient of a figure of merit with uncertainty.
 - Tuple of (mean_gradient, uncertainty)
 """
 function calculate_gradient_with_uncertainty(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function;
     n_samples::Int=10
 )
@@ -86,7 +86,7 @@ with respect to model parameters.
 - Tuple of (jacobian, uncertainty)
 """
 function estimate_jacobian(
-    model::AcceleratorModel{Float64};
+    model::AcceleratorModel;
     n_samples::Int=5
 )
     # Number of parameters
@@ -135,10 +135,10 @@ Calculate the gradient using finite difference method (for validation).
 - Gradient vector
 """
 function calculate_finite_difference_gradient(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function;
     step_size::Float64=1e-6
-)
+    )
     # Number of parameters
     n_params = length(model.params)
     
@@ -153,7 +153,7 @@ function calculate_finite_difference_gradient(
     for i in 1:n_params
         # Create perturbed parameters
         params_plus = copy(model.params)
-        params_plus[i] += step_size
+        params_plus[i] = safe_value(params_plus[i]) + step_size
         
         # Run model with perturbed parameters
         particles_plus, σ_E_plus, σ_z_plus, E0_plus = run_model(model, params_plus)

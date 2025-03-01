@@ -41,21 +41,32 @@ Model for accelerator parameter optimization with StochasticAD integration.
 - `n_particles::Int`: Number of particles
 - `processes::Vector{PhysicsProcess}`: Physics processes
 """
-struct AcceleratorModel{T}
-    params::Vector{T}
+struct AcceleratorModel
+    params::Vector{Parameter}
     base_params::SimulationParameters
     mapping::ParameterMapping
     n_particles::Int
     processes::Vector{PhysicsProcess}
     
     function AcceleratorModel(
-        params::Vector{T},
+        params::Vector{Float64},
         base_params::SimulationParameters,
         mapping::ParameterMapping,
         n_particles::Int,
         processes::Vector{PhysicsProcess}
-    ) where T <: Real
-        return new{T}(params, base_params, mapping, n_particles, processes)
+    )
+        param_vector = convert(Vector{Parameter}, params)
+        return new(param_vector, base_params, mapping, n_particles, processes)
+    end
+    
+    function AcceleratorModel(
+        params::Vector{Parameter},
+        base_params::SimulationParameters,
+        mapping::ParameterMapping,
+        n_particles::Int,
+        processes::Vector{PhysicsProcess}
+    )
+        return new(params, base_params, mapping, n_particles, processes)
     end
 end
 
@@ -90,10 +101,9 @@ Apply parameter values to create new simulation parameters.
 - Simulation parameters with updated values
 """
 function apply_parameters!(
-    model::AcceleratorModel{T},
-    params::Vector{T}
-) where T <: Real
-    
+    model::AcceleratorModel,
+    params::Vector{<:Parameter}
+) 
     # Start with base parameters
     base = model.base_params
     
@@ -147,7 +157,7 @@ function create_parameter_vector(
     mapping::ParameterMapping
 )
     # Create parameter vector
-    params = zeros(length(mapping.keys))
+    params = Vector{Parameter}(undef, length(mapping.keys))
     
     # Fill parameter vector
     for (i, key) in enumerate(mapping.keys)
@@ -226,52 +236,61 @@ Run the accelerator model with the given parameters.
 - `σ_z`: Final bunch length [m]
 - `E0`: Final reference energy [eV]
 """
-function run_model(
-    model::AcceleratorModel{T},
-    params::Vector{T}
-) where T <: Real
-    # Create simulation parameters
-    sim_params = apply_parameters!(model, params)
+function run_model(model::AcceleratorModel, params::Vector{<:Parameter})
     
-    # Initial distribution parameters
-    μ_z = 0.0
-    μ_E = 0.0
-    σ_z0 = 0.005  # 5 mm bunch length
-    σ_E0 = 1e6    # 1 MeV energy spread
-    
-    # Generate particles
-    particles, _, _, _ = generate_particles(
-        μ_z, μ_E, σ_z0, σ_E0, model.n_particles,
-        sim_params.E0, sim_params.mass, sim_params.ϕs, sim_params.freq_rf
-    )
-    
-    # Create buffers
-    nbins = Int(model.n_particles/10)
-    buffers = create_simulation_buffers(model.n_particles, nbins, Float64)
-    
-    # Run simulation for multiple turns
-    σ_E = σ_E0
-    σ_z = σ_z0
-    E0 = sim_params.E0
-    
-    for turn in 1:sim_params.n_turns
-        # Track particles for one turn
-        σ_E, σ_z, E0 = track_particles!(
-            particles, 
-            model.processes, 
-            sim_params, 
-            buffers;
-            update_η=sim_params.update_η,
-            update_E0=sim_params.update_E0
+    return StochasticAD.propagate(params...) do p_vals...
+        # Create simulation parameters with the parameter values
+        param_dict = Dict(zip(model.mapping.keys, p_vals))
+        
+        # Extract parameters with proper types
+        E0 = get(param_dict, :E0, model.base_params.E0)
+        voltage = get(param_dict, :voltage, model.base_params.voltage)
+        radius = get(param_dict, :radius, model.base_params.radius)
+        pipe_radius = get(param_dict, :pipe_radius, model.base_params.pipe_radius)
+        α_c = get(param_dict, :α_c, model.base_params.α_c)
+        ϕs = get(param_dict, :ϕs, model.base_params.ϕs)
+        freq_rf = get(param_dict, :freq_rf, model.base_params.freq_rf)
+        
+        # Create simulation parameters with extracted values
+        sim_params = SimulationParameters(
+            E0, model.base_params.mass, voltage, model.base_params.harmonic, 
+            radius, pipe_radius, α_c, ϕs, freq_rf, model.base_params.n_turns,
+            model.base_params.use_wakefield, model.base_params.update_η, 
+            model.base_params.update_E0, model.base_params.SR_damping, 
+            model.base_params.use_excitation
         )
+        
+        # Generate particles with Float64 values
+        particles, σ_E0, σ_z0, _ = generate_particles(
+            0.0, 0.0, 0.005, 1e6, model.n_particles,
+            sim_params.E0, sim_params.mass, sim_params.ϕs, sim_params.freq_rf
+        )
+        
+        # Create buffers
+        nbins = Int(model.n_particles/10)
+        buffers = create_simulation_buffers(model.n_particles, nbins, Float64)
+        
+        # Run simulation
+        σ_E = σ_E0
+        σ_z = σ_z0
+        E0_final = sim_params.E0
+        
+        for turn in 1:sim_params.n_turns
+            σ_E, σ_z, E0_final = track_particles!(
+                particles, model.processes, sim_params, buffers;
+                update_η=sim_params.update_η, update_E0=sim_params.update_E0
+            )
+        end
+        
+        # Return the final results
+        return particles, σ_E, σ_z, E0_final
     end
-    
-    return particles, σ_E, σ_z, E0
 end
 
 """
     create_stochastic_model(
-        model::AcceleratorModel{Float64},
+        model::AcceleratorModel{Float64},const Parameter = Union{Float64, StochasticTriple}
+
         fom_function::Function
     ) -> StochasticModel
 
@@ -285,18 +304,26 @@ Create a StochasticModel for the accelerator model.
 - StochasticModel for optimization
 """
 function create_stochastic_model(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function
 )
     # Create objective function
     function objective(p)
-        # Run model
-        particles, σ_E, σ_z, E0 = run_model(model, p)
+        # Convert params to Parameter type if they're not already
+        p_params = convert(Vector{Parameter}, p)
+        
+        # Run model with Parameter vector
+        particles, σ_E, σ_z, E0 = run_model(model, p_params)
         
         # Calculate figure of merit
+        # println(typeof(particles))
+        # println(particles[1])
         return fom_function(particles, σ_E, σ_z, E0)
     end
     
-    # Create StochasticModel
-    return StochasticModel(objective, model.params)
+    # Create StochasticModel with concrete Float64 parameters
+    # Extract values from any StochasticTriple parameters
+    float_params = map(safe_value, model.params)
+    
+    return StochasticModel(objective, float_params)
 end

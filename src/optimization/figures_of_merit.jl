@@ -60,6 +60,10 @@ Emittance figure of merit.
 """
 function emittance_fom(particles, σ_E, σ_z, E0)
     # Calculate correlation
+    # println(typeof(particles))
+    # println(particles[1])
+    # println(particles.coordinates[1])
+    # println(typeof(particles.coordinates.z))
     correlation = cor(particles.coordinates.z, particles.coordinates.ΔE)
     
     # Calculate emittance

@@ -121,7 +121,6 @@ function create_simulation_buffers(n_particles::Int, nbins::Int, T::Type=Float64
         random_buffer          # random_buffer
     )
 end
-
 """
     copyto_particles!(dst::StructArray{Particle{T}}, src::StructArray{Particle{T}}) where T<:Float64
 

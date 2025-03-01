@@ -95,7 +95,7 @@ end
 
 Pre-allocated buffers for efficient computation during simulation.
 """
-struct SimulationBuffers{T<:Float64}
+struct SimulationBuffers{T}
     WF::Vector{T}                # Wakefield values
     potential::Vector{T}         # Potential energy
     Δγ::Vector{T}                # Gamma factor deviations
@@ -110,3 +110,6 @@ struct SimulationBuffers{T<:Float64}
     ϕ::Vector{T}                 # Phase values
     random_buffer::Vector{T}     # Random number buffer
 end
+
+
+const Parameter = Union{Float64, StochasticTriple}

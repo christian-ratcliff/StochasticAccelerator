@@ -43,41 +43,40 @@ function track_particles!(
     particles::StructArray{Particle{T}},
     processes::Vector{PhysicsProcess},
     params::SimulationParameters,
-    buffers::SimulationBuffers{T};
+    buffers::SimulationBuffers{S};  # Allow different buffer types
     update_η::Bool=true,
     update_E0::Bool=true
-) where T<:Float64
+) where {T<:Float64, S}  # Allow any type for buffers
     
     # Extract parameters
     E0 = params.E0
     mass = params.mass
     harmonic = params.harmonic
     
-    # Calculate derived parameters
+    # Calculate derived parameters with StochasticAD.propagate
     γ0 = StochasticAD.propagate((energy, m) -> energy / m, E0, mass)
     β0 = StochasticAD.propagate(γ -> sqrt(1 - 1/γ^2), γ0)
     η0 = StochasticAD.propagate((alpha, gamma) -> alpha - 1/(gamma^2), params.α_c, γ0)
     rf_factor = StochasticAD.propagate((freq, beta) -> freq * 2π / (beta * SPEED_LIGHT), params.freq_rf, β0)
     
     # Get initial stats
-    σ_E::T = std(particles.coordinates.ΔE)
-    σ_z::T = std(particles.coordinates.z)
+    σ_E = std(particles.coordinates.ΔE)
+    σ_z = std(particles.coordinates.z)
     
-    # Store previous energy values if updating E0
+    # When updating E0, create a temporary storage that can handle any type
     if update_E0
-        ΔE_before = deepcopy(particles.coordinates.ΔE)
+        ΔE_before = map(safe_value, particles.coordinates.ΔE)
     end
     
     # Apply all physics processes
     for process in processes
-        # apply_process!(process, particles, buffers)
         apply_process!(process, particles, params, buffers)
     end
     
     # Update reference energy if needed
     if update_E0
         # Calculate mean energy change
-        mean_ΔE_diff = mean(particles.coordinates.ΔE .- ΔE_before)
+        mean_ΔE_diff = mean(map(safe_value, particles.coordinates.ΔE) .- ΔE_before)
         
         # Update reference energy
         E0 = StochasticAD.propagate((energy, diff) -> energy + diff, E0, mean_ΔE_diff)
@@ -88,30 +87,33 @@ function track_particles!(
         η0 = StochasticAD.propagate((alpha, gamma) -> alpha - 1/(gamma^2), params.α_c, γ0)
         
         # Zero the mean energy deviation
-        mean_ΔE = mean(particles.coordinates.ΔE)
+        mean_ΔE = mean(map(safe_value, particles.coordinates.ΔE))
         safe_update_energy!(particles, mean_ΔE)
     end
     
-    # Update phase advance
     if update_η
         # Update phase for each particle with individual slip factor
         for i in 1:length(particles)
+            # Get current state
+            current_z = particles.coordinates.z[i]
+            current_ΔE = particles.coordinates.ΔE[i]
+            
             # Calculate slip factor for this particle
-            Δγ_i = particles.coordinates.ΔE[i] / mass
             η_i = StochasticAD.propagate(
-                (alpha, gamma, delta_gamma) -> alpha - 1/(gamma + delta_gamma)^2,
-                params.α_c, γ0, Δγ_i
+                (alpha, gamma, delta_gamma) -> alpha - 1/(gamma + safe_value(delta_gamma))^2,
+                params.α_c, γ0, current_ΔE
             )
             
             # Update position with proper StochasticTriple handling
+            # Pass current_z as an argument to avoid referencing external values
             particles.coordinates.z[i] = StochasticAD.propagate(
-                (eta_i, h, beta, energy, rf, ϕs, ΔE) -> begin
+                (current_z_val, eta_i, h, beta, energy, rf, ϕs, ΔE) -> begin
                     coeff_i = 2π * h * eta_i / (beta * beta * energy)
-                    ϕ_i = z_to_ϕ(particles.coordinates.z[i], rf, ϕs)
+                    ϕ_i = z_to_ϕ(current_z_val, rf, ϕs)
                     ϕ_i += coeff_i * ΔE
                     return ϕ_to_z(ϕ_i, rf, ϕs)
                 end,
-                η_i, harmonic, β0, E0, rf_factor, params.ϕs, particles.coordinates.ΔE[i]
+                current_z, η_i, harmonic, β0, E0, rf_factor, params.ϕs, current_ΔE
             )
         end
     else
@@ -119,9 +121,9 @@ function track_particles!(
         apply_phase_advance!(particles, η0, harmonic, β0, E0, rf_factor, params.ϕs)
     end
     
-    # Calculate final stats
-    σ_E = std(particles.coordinates.ΔE)
-    σ_z = std(particles.coordinates.z)
+    # Calculate final stats (safely extract values for StochasticTriple)
+    σ_E = std(map(safe_value, particles.coordinates.ΔE))
+    σ_z = std(map(safe_value, particles.coordinates.z))
     
     return σ_E, σ_z, E0
 end
@@ -220,8 +222,18 @@ function safe_update_energy!(particles::StructArray{Particle{T}}, mean_value) wh
             )
         end
     else
-        # If it's a regular Float64, just do the subtraction directly
-        particles.coordinates.ΔE .-= mean_value
+        # For Float64 mean values handling potential StochasticTriple elements
+        for i in 1:length(particles)
+            if typeof(particles.coordinates.ΔE[i]) <: StochasticTriple
+                particles.coordinates.ΔE[i] = StochasticAD.propagate(
+                    (e, m) -> e - m,
+                    particles.coordinates.ΔE[i],
+                    mean_value
+                )
+            else
+                particles.coordinates.ΔE[i] -= mean_value
+            end
+        end
     end
     return nothing
 end
@@ -395,4 +407,16 @@ function setup_simulation(
     end
     
     return particles, processes, buffers
+end
+
+"""
+Safe standard deviation function that handles StochasticTriple values.
+"""
+function safe_std(values)
+    # Extract real values if we have StochasticTriple
+    if any(x -> typeof(x) <: StochasticTriple, values)
+        return std(map(safe_value, values))
+    else
+        return std(values)
+    end
 end

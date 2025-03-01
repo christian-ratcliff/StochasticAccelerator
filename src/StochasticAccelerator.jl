@@ -49,7 +49,10 @@ include("optimization/optimization.jl")
 
 # Export core types and constants
 export SPEED_LIGHT, ELECTRON_CHARGE, MASS_ELECTRON
-export Coordinate, Particle, PhysicsProcess, SimulationParameters, SimulationBuffers
+export Coordinate, Particle, PhysicsProcess, SimulationParameters, SimulationBuffers, Parameter
+
+# Export utilitiy 
+export safe_value, is_stochastic_triple, has_stochastic_triple, ϕ_to_z, z_to_ϕ, calc_rf_factor, create_simulation_buffers, create_rf_cavity, calculate_histogram, create_synchrotron_radiation, create_quantum_excitation, create_wakefield
 
 # Export physics processes
 export RFCavity, SynchrotronRadiation, QuantumExcitation, Wakefield

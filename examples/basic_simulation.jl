@@ -206,7 +206,7 @@ particles, processes, buffers = setup_simulation(
     μ_z=μ_z, μ_E=μ_E, σ_z0=σ_z0, σ_E0=σ_E0
 )
 
-typeof(processes)
+# typeof(processes)
 
 function longitidunal_evolve(particles::StructArray{Particle{Float64}}, params::SimulationParameters, buffers::SimulationBuffers, processes::Vector{PhysicsProcess})
     # Run simulation

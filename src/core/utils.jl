@@ -99,9 +99,15 @@ Compute the fast convolution of two vectors using FFT.
 # Returns
 - Convolution result
 """
-function FastConv1D(f::AbstractVector{T}, g::AbstractVector{T})::Vector{Complex{T}} where T<:Float64
-    return ifft(fft(f) .* fft(g))
+function FastConv1D(f::AbstractVector, g::AbstractVector)
+    # Make sure types are compatible
+    T = promote_type(eltype(f), eltype(g))
+    f_promoted = convert(Vector{T}, f)
+    g_promoted = convert(Vector{T}, g)
+    
+    return ifft(fft(f_promoted) .* fft(g_promoted))
 end
+
 
 """
     FastLinearConvolution(f::AbstractVector{T}, g::AbstractVector{T}, power_2_length::Int) where T
@@ -116,9 +122,21 @@ Compute linear convolution with automatic padding to power of 2 length.
 # Returns
 - Convolution result
 """
-function FastLinearConvolution(f::AbstractVector{T}, g::AbstractVector{T}, power_2_length::Int64)::Vector{Complex{T}} where T<:Float64
-    pad_and_ensure_power_of_two!(f, g, power_2_length)
-    return FastConv1D(f, g)
+function FastLinearConvolution(f::AbstractVector, g::AbstractVector, power_2_length::Int64)
+    # Use the safe_value function to extract values from StochasticTriple if needed
+    f_values = map(safe_value, f)
+    g_values = map(safe_value, g)
+    
+    # Find a common type and convert
+    T = promote_type(eltype(f_values), eltype(g_values))
+    f_promoted = convert(Vector{T}, f_values)
+    g_promoted = convert(Vector{T}, g_values)
+    
+    # Ensure we're working with power of 2 lengths
+    pad_and_ensure_power_of_two!(f_promoted, g_promoted, power_2_length)
+    
+    # Perform the convolution
+    return FastConv1D(f_promoted, g_promoted)
 end
 
 """
@@ -215,16 +233,32 @@ function threaded_fieldwise_copy!(destination::StructArray{Particle{T}}, source:
     end
 end
 
-"""
-    assign_to_turn!(particle_trajectory, particle_states, turn)
+# """
+#     assign_to_turn!(particle_trajectory, particle_states, turn)
 
-Assign current particle states to the specified turn in the trajectory.
+# Assign current particle states to the specified turn in the trajectory.
 
-# Arguments
-- `particle_trajectory`: Trajectory to update
-- `particle_states`: Current particle states
-- `turn`: Turn number
-"""
+# # Arguments
+# - `particle_trajectory`: Trajectory to update
+# - `particle_states`: Current particle states
+# - `turn`: Turn number
+# """
 # function assign_to_turn!(particle_trajectory::BeamTurn{T}, particle_states::StructArray{Particle{T}}, turn::Integer) where T<:Float64
 #     threaded_fieldwise_copy!(particle_trajectory.states[turn], particle_states)
 # end
+
+"""
+Extract the value from a parameter (either StochasticTriple or regular value).
+"""
+safe_value(x::StochasticTriple) = value(x)
+safe_value(x) = x
+
+"""
+Check if a value is a StochasticTriple.
+"""
+is_stochastic_triple(x) = typeof(x) <: StochasticTriple
+
+"""
+Check if any value in an iterable is a StochasticTriple.
+"""
+has_stochastic_triple(xs) = any(is_stochastic_triple, xs)

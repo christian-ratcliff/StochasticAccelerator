@@ -86,7 +86,7 @@ function longitidunal_evolve(particles::StructArray{Particle{Float64}}, params::
     end
 end
 
-@btime longitidunal_evolve($particles, $params, $buffers, $processes)
+@btime longitidunal_evolve($particles, $params, $buffers, $processes) # 215.457 ms (370686 allocations: 350.07 MiB)
 
 @benchmark longitidunal_evolve($particles, $params,$buffers, $processes)
 

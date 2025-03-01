@@ -57,8 +57,8 @@ function apply_process!(
     process::Wakefield, 
     particles::StructArray{Particle{T}},
     params::SimulationParameters,
-    buffers::SimulationBuffers{T}
-) where T<:Float64
+    buffers::SimulationBuffers{S}
+    ) where {T<:Float64, S} 
     
     # Get process parameters
     wake_factor = process.wake_factor

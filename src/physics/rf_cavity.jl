@@ -44,50 +44,53 @@ function apply_process!(
     process::RFCavity, 
     particles::StructArray{Particle{T}},
     params::SimulationParameters,
-    buffers::SimulationBuffers{T}
-) where T<:Float64
+    buffers::SimulationBuffers{S}
+    ) where {T<:Float64, S}  # Remove the T<:Float64 constraint for buffers
     
     # Get process parameters
     voltage = process.voltage
     ϕs = process.ϕs
     rf_factor = process.rf_factor
-    sin_ϕs = sin(ϕs)
+    sin_ϕs = StochasticAD.propagate(sin, ϕs)
     
     # Check if any parameter is a StochasticTriple
     is_stochastic = any(p -> typeof(p) <: StochasticTriple, [voltage, sin_ϕs, rf_factor, ϕs])
     
     if is_stochastic
         # Use StochasticAD.propagate for proper gradient propagation
-        StochasticAD.propagate(voltage, sin_ϕs, rf_factor, ϕs) do v, sin_s, rf, phase_s
-            @inbounds begin
-                
-                # @fasthmath sinϕ = sin.(-particles.coordinates.z .* rf_factor .+ ϕs) .- sin_ϕs
-                # particles.coordinates.ΔE .= particles.coordinates.ΔE .+ voltage .* sinϕ
-                z_vals = particles.coordinates.z[i]  # Cache the value
-                ΔE_vals = particles.coordinates.ΔE[i]
-                # Iterate and use cached values
-                for i in 1:length(particles)
-                      # Cache the value
-                    
-                    ϕ_val = -(z_vals[i] * rf_factor - ϕs)
-                    ΔE_vals[i] += voltage * (sin(ϕ_val) - sin_ϕs)
-                    
-                    particles.coordinates.ΔE[i] = ΔE_i[i] # Store the updated value
-                end
-            end
+        z_val = particles.coordinates.z
+        ΔE_val = particles.coordinates.ΔE
+        for i in 1:length(particles)
             
-            return nothing  # Result is not used, but propagation is ensured
+            
+            # # Calculate sin(ϕ) with proper gradient propagation
+            # phase = StochasticAD.propagate(
+            #     (z, rf, phi_s) -> -(z * rf - phi_s),
+            #     z_val[i], rf_factor, ϕs
+            # )
+            
+            # # Calculate sin(ϕ) - sin(ϕs)
+            # sin_term = StochasticAD.propagate(
+            #     (phase, sin_s) -> sin(phase) - sin_s,
+            #     phase, sin_ϕs
+            # )
+            
+            # # Update energy with proper gradient propagation
+            # particles.coordinates.ΔE[i] = StochasticAD.propagate(
+            #     (de, v, s) -> de + v * s,
+            #     ΔE_val[i], voltage, sin_term
+            # )
+
+            particles.coordinates.ΔE[i] = StochasticAD.propagate(
+                (z, rf, phi_s, sin_s, de, v, s) -> de + v * (sin(-(z * rf - phi_s)) - sin_s),
+                z_val[i], rf_factor, ϕs, sin_ϕs, ΔE_val[i], voltage, sin_ϕs)
+
         end
     else
         # Standard vectorized implementation for non-StochasticTriple case
-
-
-        sinϕ = sin.(-particles.coordinates.z .* rf_factor .+ ϕs) .- sin_ϕs
-        particles.coordinates.ΔE .= particles.coordinates.ΔE .+ voltage .* sinϕ
-        
+        # sinϕ = sin.(-particles.coordinates.z .* rf_factor .+ ϕs) .- sin_ϕs
+        particles.coordinates.ΔE .= particles.coordinates.ΔE .+ voltage .* (sin.(-particles.coordinates.z .* rf_factor .+ ϕs) .- sin_ϕs)
     end
-
-    # sin(-z_i * rf_factor + ϕs) = sin(-z_i * rf_factor) * cos(ϕs) - cos(-z_i * rf_factor) * sin(ϕs)
     
     return nothing
 end

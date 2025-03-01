@@ -38,14 +38,14 @@ Optimize accelerator parameters using gradient descent.
 - `param_history`: Parameter history
 """
 function optimize_parameters(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function;
     iterations::Int=100,
     optimizer=Descent(0.01),
     show_progress::Bool=true,
     callback::Function=nothing,
     constraints::Dict{Int, Tuple{Float64, Float64}}=Dict{Int, Tuple{Float64, Float64}}()
-)
+    )
     # Create StochasticModel
     stoch_model = create_stochastic_model(model, fom_function)
     
@@ -54,7 +54,7 @@ function optimize_parameters(
     
     # Track history
     fom_history = Float64[]
-    param_history = Vector{Float64}[]
+    param_history = Vector{Parameter}[]
     
     # Setup progress meter
     prog = show_progress ? Progress(iterations, desc="Optimizing: ") : nothing
@@ -73,7 +73,7 @@ function optimize_parameters(
         if show_progress
             param_desc = ""
             for (j, key) in enumerate(model.mapping.keys)
-                param_desc *= "$key=$(round(stoch_model.p[j], digits=6)) "
+                param_desc *= "$key=$(round(safe_value(stoch_model.p[j]), digits=6)) "
             end
             ProgressMeter.update!(prog, i, desc="Optimizing (FoM=$current_fom): ", valuecolor=:blue, showvalues=[(:Parameters, param_desc)])
         end
@@ -91,7 +91,8 @@ function optimize_parameters(
         
         # Apply constraints
         for (idx, (min_val, max_val)) in constraints
-            stoch_model.p[idx] = clamp(stoch_model.p[idx], min_val, max_val)
+            val = safe_value(stoch_model.p[idx])
+            stoch_model.p[idx] = clamp(val, min_val, max_val)
         end
     end
     
@@ -125,7 +126,7 @@ Scan a parameter over a range of values.
 - `gradient_uncertainties`: Gradient uncertainties (if calculated)
 """
 function scan_parameter(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function,
     param_index::Int,
     param_range::AbstractVector{Float64};
@@ -158,6 +159,7 @@ function scan_parameter(
             stoch_model = create_stochastic_model(model_copy, fom_function)
             
             # Calculate gradient with uncertainty
+            println(stochastic_gradient(stoch_model))
             gradient_samples = [stochastic_gradient(stoch_model)[param_index] for _ in 1:n_gradient_samples]
             gradient_values[i] = mean(gradient_samples)
             gradient_uncertainties[i] = std(gradient_samples) / sqrt(n_gradient_samples)
@@ -166,6 +168,7 @@ function scan_parameter(
     
     return param_values, fom_values, gradient_values, gradient_uncertainties
 end
+
 
 """
     multi_parameter_scan(
@@ -188,7 +191,7 @@ Scan multiple parameters over ranges of values.
 - `fom_grid`: Grid of figure of merit values
 """
 function multi_parameter_scan(
-    model::AcceleratorModel{Float64},
+    model::AcceleratorModel,
     fom_function::Function,
     param_indices::Vector{Int},
     param_ranges::Vector{AbstractVector{Float64}}
@@ -236,3 +239,5 @@ function multi_parameter_scan(
         return [param1_range, param2_range], fom_grid
     end
 end
+
+

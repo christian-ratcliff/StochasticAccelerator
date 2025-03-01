@@ -42,8 +42,8 @@ function apply_process!(
     process::SynchrotronRadiation, 
     particles::StructArray{Particle{T}},
     params::SimulationParameters,
-    buffers::SimulationBuffers{T}
-) where T<:Float64
+    buffers::SimulationBuffers{S}
+    ) where {T<:Float64, S}  # Update type constraints
     
     # Get process parameters
     E0 = process.E0
