@@ -159,8 +159,8 @@ function scan_parameter(
             stoch_model = create_stochastic_model(model_copy, fom_function)
             
             # Calculate gradient with uncertainty
-            println(stochastic_gradient(stoch_model))
-            gradient_samples = [stochastic_gradient(stoch_model)[param_index] for _ in 1:n_gradient_samples]
+            # println(typeof(stochastic_gradient(stoch_model)))
+            gradient_samples = [stochastic_gradient(stoch_model).p[param_index] for _ in 1:n_gradient_samples]
             gradient_values[i] = mean(gradient_samples)
             gradient_uncertainties[i] = std(gradient_samples) / sqrt(n_gradient_samples)
         end
@@ -190,11 +190,61 @@ Scan multiple parameters over ranges of values.
 - `param_grid`: Grid of parameter values
 - `fom_grid`: Grid of figure of merit values
 """
+# function multi_parameter_scan(
+#     model::AcceleratorModel,
+#     fom_function::Function,
+#     param_indices::Vector{Int},
+#     param_ranges::Vector{<:AbstractVector{<:Real}}
+# )
+#     # Check that we have two parameters at most
+#     @assert length(param_indices) <= 2 "Cannot scan more than 2 parameters at once"
+    
+#     # Create copy of model
+#     model_copy = deepcopy(model)
+    
+#     if length(param_indices) == 1
+#         # Single parameter scan
+#         param_values, fom_values, _, _ = scan_parameter(
+#             model_copy,
+#             fom_function,
+#             param_indices[1],
+#             param_ranges[1];
+#             calculate_gradients=false
+#         )
+        
+#         return [param_values], fom_values
+#     else
+#         # Two parameter scan
+#         param1_range = param_ranges[1]
+#         param2_range = param_ranges[2]
+        
+#         # Initialize result grid
+#         fom_grid = zeros(length(param1_range), length(param2_range))
+        
+#         # Scan parameters
+#         for (i, param1_value) in enumerate(param1_range)
+#             for (j, param2_value) in enumerate(param2_range)
+#                 # Update parameters
+#                 model_copy.params[param_indices[1]] = param1_value
+#                 model_copy.params[param_indices[2]] = param2_value
+                
+#                 # Run model
+#                 particles, σ_E, σ_z, E0 = run_model(model_copy, model_copy.params)
+                
+#                 # Calculate figure of merit
+#                 fom_grid[i, j] = fom_function(particles, σ_E, σ_z, E0)
+#             end
+#         end
+        
+#         return [param1_range, param2_range], fom_grid
+#     end
+# end
+
 function multi_parameter_scan(
     model::AcceleratorModel,
     fom_function::Function,
     param_indices::Vector{Int},
-    param_ranges::Vector{AbstractVector{Float64}}
+    param_ranges::Vector{<:AbstractVector{<:Real}}
 )
     # Check that we have two parameters at most
     @assert length(param_indices) <= 2 "Cannot scan more than 2 parameters at once"
@@ -203,16 +253,16 @@ function multi_parameter_scan(
     model_copy = deepcopy(model)
     
     if length(param_indices) == 1
-        # Single parameter scan
-        param_values, fom_values, _, _ = scan_parameter(
+        # Single parameter scan with gradients
+        param_values, fom_values, gradient_values, _ = scan_parameter(
             model_copy,
             fom_function,
             param_indices[1],
             param_ranges[1];
-            calculate_gradients=false
+            calculate_gradients=true
         )
         
-        return [param_values], fom_values
+        return [param_values], fom_values, [gradient_values]
     else
         # Two parameter scan
         param1_range = param_ranges[1]
@@ -220,6 +270,9 @@ function multi_parameter_scan(
         
         # Initialize result grid
         fom_grid = zeros(length(param1_range), length(param2_range))
+        # Initialize gradient grids - one for each parameter
+        gradient1_grid = zeros(length(param1_range), length(param2_range))
+        gradient2_grid = zeros(length(param1_range), length(param2_range))
         
         # Scan parameters
         for (i, param1_value) in enumerate(param1_range)
@@ -233,11 +286,18 @@ function multi_parameter_scan(
                 
                 # Calculate figure of merit
                 fom_grid[i, j] = fom_function(particles, σ_E, σ_z, E0)
+                
+                # Calculate gradients using StochasticAD
+                stoch_model = create_stochastic_model(model_copy, fom_function)
+                gradient = stochastic_gradient(stoch_model)
+                
+                # Extract gradients for each parameter
+                gradient1_grid[i, j] = gradient.p[param_indices[1]]
+                gradient2_grid[i, j] = gradient.p[param_indices[2]]
             end
         end
         
-        return [param1_range, param2_range], fom_grid
+        return [param1_range, param2_range], fom_grid, [gradient1_grid, gradient2_grid]
     end
 end
-
 

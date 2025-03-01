@@ -1,10 +1,12 @@
 include("../src/StochasticAccelerator.jl")
 
-using .StochasticAccelerator
-using Plots
-using Statistics
-using Random
-using StochasticAD
+begin
+    using .StochasticAccelerator
+    using Plots
+    using Statistics
+    using Random
+    using StochasticAD
+end
 
 # Set random seed for reproducibility
 Random.seed!(12345)
@@ -232,35 +234,220 @@ end
 """
 Plot the results of the 2D parameter scan.
 """
-function plot_2d_scan_results(param_grid, emittance_grid)
+# function plot_2d_scan_results(param_grid, emittance_grid)
+#     # Extract parameter values
+#     voltage_range = param_grid[1]
+#     α_c_range = param_grid[2]
+    
+#     # Convert to more readable units
+#     voltage_MV = voltage_range ./ 1e6
+#     α_c_values = α_c_range .* 1e4
+#     emittance_values = emittance_grid .* 1e6  # Convert to MeV·mm
+    
+#     # Create a 3-panel layout
+#     l = @layout [a{0.5w} [b; c]]
+    
+#     # 1. Main contour plot of emittance
+#     p1 = contourf(
+#         voltage_MV,
+#         α_c_values,
+#         emittance_values',
+#         title="Emittance vs. RF Voltage and Momentum Compaction",
+#         xlabel="RF Voltage [MV]",
+#         ylabel="Momentum Compaction [10⁻⁴]",
+#         c=:viridis,
+#         colorbar_title="Emittance [MeV·mm]",
+#         levels=10
+#     )
+    
+#     # Add contour lines and mark the minimum
+#     contour!(p1, voltage_MV, α_c_values, emittance_values', linecolor=:black, linewidth=0.5)
+#     min_val, min_idx = findmin(emittance_values)
+#     min_i, min_j = Tuple(CartesianIndices(emittance_values)[min_idx])
+#     scatter!(p1, [voltage_MV[min_i]], [α_c_values[min_j]], 
+#              color=:red, markersize=8, markershape=:star, label="Minimum")
+    
+#     # 2. Calculate derivative with respect to voltage
+#     dE_dV = zeros(length(voltage_range), length(α_c_range))
+    
+#     # Use forward/backward/central differences as appropriate
+#     for i in 1:length(voltage_range)
+#         for j in 1:length(α_c_range)
+#             if i == 1
+#                 dE_dV[i,j] = (emittance_values[i+1,j] - emittance_values[i,j]) / 
+#                              (voltage_range[i+1] - voltage_range[i])
+#             elseif i == length(voltage_range)
+#                 dE_dV[i,j] = (emittance_values[i,j] - emittance_values[i-1,j]) / 
+#                              (voltage_range[i] - voltage_range[i-1])
+#             else
+#                 dE_dV[i,j] = (emittance_values[i+1,j] - emittance_values[i-1,j]) / 
+#                              (voltage_range[i+1] - voltage_range[i-1])
+#             end
+#         end
+#     end
+    
+#     # Plot voltage derivative
+#     dE_dV_scaled = dE_dV .* 1e6 ./ 1e6  # MeV·mm / MV
+#     max_dV = maximum(abs.(dE_dV_scaled))
+#     p2 = contourf(
+#         voltage_MV,
+#         α_c_values,
+#         dE_dV_scaled',
+#         title="∂(Emittance)/∂(Voltage)",
+#         xlabel="RF Voltage [MV]",
+#         ylabel="Momentum Compaction [10⁻⁴]",
+#         c=:RdBu,  # Red-Blue diverging colormap for derivatives
+#         clims=(-max_dV, max_dV),  # Symmetric limits
+#         colorbar_title="MeV·mm/MV"
+#     )
+#     # Add zero contour line (where derivative changes sign)
+#     contour!(p2, voltage_MV, α_c_values, dE_dV_scaled', levels=[0], 
+#              linecolor=:black, linewidth=2, linestyle=:dash)
+    
+#     # 3. Calculate derivative with respect to α_c
+#     dE_dα = zeros(length(voltage_range), length(α_c_range))
+#     for i in 1:length(voltage_range)
+#         for j in 1:length(α_c_range)
+#             if j == 1
+#                 dE_dα[i,j] = (emittance_values[i,j+1] - emittance_values[i,j]) / 
+#                              (α_c_range[j+1] - α_c_range[j])
+#             elseif j == length(α_c_range)
+#                 dE_dα[i,j] = (emittance_values[i,j] - emittance_values[i,j-1]) / 
+#                              (α_c_range[j] - α_c_range[j-1])
+#             else
+#                 dE_dα[i,j] = (emittance_values[i,j+1] - emittance_values[i,j-1]) / 
+#                              (α_c_range[j+1] - α_c_range[j-1])
+#             end
+#         end
+#     end
+    
+#     # Plot α_c derivative
+#     dE_dα_scaled = dE_dα .* 1e6 ./ 1e4  # MeV·mm / 10⁻⁴
+#     max_dα = maximum(abs.(dE_dα_scaled))
+#     p3 = contourf(
+#         voltage_MV,
+#         α_c_values,
+#         dE_dα_scaled',
+#         title="∂(Emittance)/∂(α_c)",
+#         xlabel="RF Voltage [MV]",
+#         ylabel="Momentum Compaction [10⁻⁴]",
+#         c=:RdBu,  # Red-Blue diverging colormap
+#         clims=(-max_dα, max_dα),  # Symmetric limits
+#         colorbar_title="MeV·mm/10⁻⁴"
+#     )
+#     # Add zero contour line
+#     contour!(p3, voltage_MV, α_c_values, dE_dα_scaled', levels=[0], 
+#              linecolor=:black, linewidth=2, linestyle=:dash)
+    
+#     # Combine plots
+#     p = plot(p1, p2, p3, layout=l, size=(1200, 800))
+    
+#     # Add annotation about minimum
+#     min_info = "Minimum emittance: $(round(min_val, digits=2)) MeV·mm\nat V=$(round(voltage_MV[min_i], digits=2)) MV, α_c=$(round(α_c_values[min_j], digits=2))×10⁻⁴"
+#     annotate!(p1, voltage_MV[1] + 0.2*(voltage_MV[end] - voltage_MV[1]), 
+#               α_c_values[1] + 0.1*(α_c_values[end] - α_c_values[1]), 
+#               text(min_info, 8, :left))
+    
+#     savefig(p, "2d_scan_results.png")
+#     display(p)
+    
+#     println("Enhanced plot saved to 2d_scan_results.png")
+#     println("Minimum emittance: $(round(min_val, digits=3)) MeV·mm at $(round(voltage_MV[min_i], digits=2)) MV, $(round(α_c_values[min_j], digits=2))×10⁻⁴")
+    
+#     return p
+# end
+
+function plot_2d_scan_results(param_grid, emittance_grid, gradient_grids)
     # Extract parameter values
     voltage_range = param_grid[1]
     α_c_range = param_grid[2]
-
+    
+    # Get gradients calculated by StochasticAD
+    dE_dV_grid = gradient_grids[1] 
+    dE_dα_grid = gradient_grids[2]
+    
     # Convert to more readable units
     voltage_MV = voltage_range ./ 1e6
     α_c_values = α_c_range .* 1e4
-
-    # Create heatmap
-    p = heatmap(
+    emittance_values = emittance_grid .* 1e6  # Convert to MeV·mm
+    
+    # Scale gradients to appropriate units
+    dE_dV_scaled = dE_dV_grid .* 1e6 ./ 1e6  # MeV·mm/MV
+    dE_dα_scaled = dE_dα_grid .* 1e6 ./ 1e4  # MeV·mm/10⁻⁴
+    
+    # Create a 3-panel layout
+    l = @layout [a{0.5w} [b; c]]
+    
+    # 1. Main contour plot of emittance
+    p1 = contourf(
         voltage_MV,
         α_c_values,
-        emittance_grid' .* 1e6,  # Convert to MeV·mm
+        emittance_values',
         title="Emittance vs. RF Voltage and Momentum Compaction",
         xlabel="RF Voltage [MV]",
         ylabel="Momentum Compaction [10⁻⁴]",
+        c=:viridis,
         colorbar_title="Emittance [MeV·mm]",
-        c=:viridis
+        levels=10
     )
-
+    
+    # Add contour lines and mark the minimum
+    min_val, min_idx = findmin(emittance_values)
+    min_i, min_j = Tuple(CartesianIndices(emittance_values)[min_idx])
+    scatter!(p1, [voltage_MV[min_i]], [α_c_values[min_j]], 
+             color=:red, markersize=8, markershape=:star, label="Minimum")
+    
+    # 2. Plot voltage derivative from StochasticAD
+    max_dV = maximum(abs.(dE_dV_scaled))
+    p2 = contourf(
+        voltage_MV,
+        α_c_values,
+        dE_dV_scaled',
+        title="∂(Emittance)/∂(Voltage) via StochasticAD",
+        xlabel="RF Voltage [MV]",
+        ylabel="Momentum Compaction [10⁻⁴]",
+        c=:RdBu,
+        clims=(-max_dV, max_dV),
+        colorbar_title="MeV·mm/MV"
+    )
+    
+    # 3. Plot α_c derivative from StochasticAD
+    max_dα = maximum(abs.(dE_dα_scaled))
+    p3 = contourf(
+        voltage_MV,
+        α_c_values,
+        dE_dα_scaled',
+        title="∂(Emittance)/∂(α_c) via StochasticAD",
+        xlabel="RF Voltage [MV]",
+        ylabel="Momentum Compaction [10⁻⁴]",
+        c=:RdBu,
+        clims=(-max_dα, max_dα),
+        colorbar_title="MeV·mm/10⁻⁴"
+    )
+    
+    # Combine plots
+    p = plot(p1, p2, p3, layout=l, size=(1200, 800))
+    
+    # Add annotation about minimum
+    min_info = "Minimum emittance: $(round(min_val, digits=2)) MeV·mm\nat V=$(round(voltage_MV[min_i], digits=2)) MV, α_c=$(round(α_c_values[min_j], digits=2))×10⁻⁴"
+    annotate!(p1, voltage_MV[1] + 0.2*(voltage_MV[end] - voltage_MV[1]), 
+              α_c_values[1] + 0.1*(α_c_values[end] - α_c_values[1]), 
+              text(min_info, 8, :left))
+    
     savefig(p, "2d_scan_results.png")
     display(p)
-
-    println("Plot saved to 2d_scan_results.png")
+    
+    println("Enhanced plot saved to 2d_scan_results.png")
+    println("Minimum emittance: $(round(min_val, digits=3)) MeV·mm at $(round(voltage_MV[min_i], digits=2)) MV, $(round(α_c_values[min_j], digits=2))×10⁻⁴")
+    
+    return p
 end
 
+
 # Run the voltage scan
-voltage_values, energy_spread_values, bunch_length_values, grad_energy, grad_length = scan_rf_voltage()
+# voltage_values, energy_spread_values, bunch_length_values, grad_energy, grad_length = scan_rf_voltage();
 
 # Run the 2D parameter scan
-param_grid, emittance_grid = scan_momentum_compaction_and_voltage()
+param_grid, emittance_grid = scan_momentum_compaction_and_voltage();
+
+

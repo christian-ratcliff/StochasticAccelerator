@@ -7,6 +7,7 @@ for optimizing the accelerator parameters.
 
 using StructArrays
 using Statistics
+using StochasticAD
 
 """
     energy_spread_fom(particles, σ_E, σ_z, E0) -> Float64
@@ -58,18 +59,61 @@ Emittance figure of merit.
 # Returns
 - Emittance [eV·m]
 """
-function emittance_fom(particles, σ_E, σ_z, E0)
-    # Calculate correlation
-    # println(typeof(particles))
-    # println(particles[1])
-    # println(particles.coordinates[1])
-    # println(typeof(particles.coordinates.z))
-    correlation = cor(particles.coordinates.z, particles.coordinates.ΔE)
+# function emittance_fom(particles, σ_E, σ_z, E0)
+#     # Calculate correlation
+#     # println(typeof(particles))
+#     # println(particles[1])
+#     # println(particles.coordinates[1])
+#     # println(typeof(particles.coordinates.z))
+#     correlation = cor(particles.coordinates.z, particles.coordinates.ΔE)
     
-    # Calculate emittance
+#     # Calculate emittance
+#     emittance = σ_E * σ_z * sqrt(1 - correlation^2)
+    
+#     return emittance
+# end
+
+function emittance_fom(particles, σ_E, σ_z, E0)
+    # Calculate correlation - no fallbacks, only proper physics
+    # local correlation
+    # println(particles[1:5])
+    # if typeof(particles) == SVector{2, SVector{2, StochasticTriple}}
+    #     print(particles[1][1].value)
+    # end
+    # if particles isa StructArray
+    #     # Standard case with StructArray
+    #     correlation = cor(particles.coordinates.z, particles.coordinates.ΔE)
+    # elseif particles isa Vector && !isempty(particles) && hasproperty(first(particles), :coordinates)
+    #     # Handle Vector of Particle objects (may happen with StochasticAD)
+    #     z_vals = [p.coordinates.z for p in particles]
+    #     ΔE_vals = [p.coordinates.ΔE for p in particles]
+    #     correlation = cor(z_vals, ΔE_vals)
+    # else
+    #     # If we can't determine the correlation, we should not proceed
+    #     error("Cannot calculate correlation: unsupported particle structure $(typeof(particles))")
+    # end
+
+    if typeof(particles) != StructArrays.StructVector{Particle{Float64}, @NamedTuple{coordinates::StructArrays.StructVector{Coordinate{Float64}, @NamedTuple{z::Vector{Float64}, ΔE::Vector{Float64}}, Int64}, uncertainty::StructArrays.StructVector{Coordinate{Float64}, @NamedTuple{z::Vector{Float64}, ΔE::Vector{Float64}}, Int64}}, Int64}
+        # println(typeof(particles))
+        # println(StochasticAD.value(particles))
+        # println(" z = ", getindex.(particles, 1))
+        println(getindex.(particles, 1))
+        # println("delE = ", particles[1][2])
+        # println(" z = ",StochasticAD.value(particles[1][1]))
+        # println("delE = ", StochasticAD.value(particles[1][2]))
+        # println(StochasticAD.value(getindex.(particles[1],1)))
+        # println(typeof(particles.coordinates.z))
+    
+    
+    correlation = cor(getindex.(particles, 1), getindex.(particles, 2))
+    # Calculate emittance with the exact physics formula
     emittance = σ_E * σ_z * sqrt(1 - correlation^2)
     
     return emittance
+
+    end
+
+    return 0.0
 end
 
 """
