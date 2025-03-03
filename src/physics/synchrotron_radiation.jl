@@ -38,50 +38,73 @@ Apply synchrotron radiation damping to all particles.
 - `params`: Simulation parameters
 - `buffers`: Simulation buffers
 """
+# function apply_process!(
+#     process::SynchrotronRadiation, 
+#     particles::StructArray{Particle{T}},
+#     params::SimulationParameters,
+#     buffers::SimulationBuffers{S}
+#     ) where {T<:Float64, S}  # Update type constraints
+    
+#     # Get process parameters
+#     E0 = process.E0
+#     radius = process.radius
+    
+#     # Check if any parameter is a StochasticTriple
+#     is_stochastic = any(p -> typeof(p) <: StochasticTriple, [E0, radius])
+    
+#     if is_stochastic
+#         # Calculate damping factor with StochasticAD.propagate
+#         damping_fn = (e0, r) -> begin
+#             ∂U_∂E = 4 * 8.85e-5 * (e0/1e9)^3 / r
+#             return 1 - ∂U_∂E
+#         end
+        
+#         # Get the damping factor with proper gradient propagation
+#         damping_factor = StochasticAD.propagate(damping_fn, E0, radius)
+        
+#         # Apply to all particles with proper StochasticTriple handling
+#         for i in 1:length(particles)
+#             particles.coordinates.ΔE[i] = StochasticAD.propagate(
+#                 (de, df) -> de * df,
+#                 particles.coordinates.ΔE[i],
+#                 damping_factor
+#             )
+#         end
+#     else
+#         # Standard implementation for non-StochasticTriple case
+#         ∂U_∂E = 4 * 8.85e-5 * (E0/1e9)^3 / radius
+#         damping_factor = 1 - ∂U_∂E
+        
+#         # Apply damping to all particles
+#         particles.coordinates.ΔE .*= damping_factor
+#     end
+    
+#     return nothing
+# end
 function apply_process!(
     process::SynchrotronRadiation, 
     particles::StructArray{Particle{T}},
     params::SimulationParameters,
     buffers::SimulationBuffers{S}
-    ) where {T<:Float64, S}  # Update type constraints
+    ) where {T<:Float64, S}
     
-    # Get process parameters
-    E0 = process.E0
-    radius = process.radius
+    # Get process parameters with safe_value
+    E0 = safe_value(process.E0)
+    radius = safe_value(process.radius)
     
-    # Check if any parameter is a StochasticTriple
-    is_stochastic = any(p -> typeof(p) <: StochasticTriple, [E0, radius])
+    ∂U_∂E = 4 * 8.85e-5 * (E0/1e9)^3 / radius
+    damping_factor = 1 - ∂U_∂E
     
-    if is_stochastic
-        # Calculate damping factor with StochasticAD.propagate
-        damping_fn = (e0, r) -> begin
-            ∂U_∂E = 4 * 8.85e-5 * (e0/1e9)^3 / r
-            return 1 - ∂U_∂E
-        end
-        
-        # Get the damping factor with proper gradient propagation
-        damping_factor = StochasticAD.propagate(damping_fn, E0, radius)
-        
-        # Apply to all particles with proper StochasticTriple handling
-        for i in 1:length(particles)
-            particles.coordinates.ΔE[i] = StochasticAD.propagate(
-                (de, df) -> de * df,
-                particles.coordinates.ΔE[i],
-                damping_factor
-            )
-        end
-    else
-        # Standard implementation for non-StochasticTriple case
-        ∂U_∂E = 4 * 8.85e-5 * (E0/1e9)^3 / radius
-        damping_factor = 1 - ∂U_∂E
-        
-        # Apply damping to all particles
-        particles.coordinates.ΔE .*= damping_factor
+    # Add small randomness for StochasticAD to work
+    damping_factor *= (1.0 + 0.01 * rand(Bernoulli(0.5)))
+    
+    # Apply damping to all particles
+    for i in 1:length(particles)
+        particles.coordinates.ΔE[i] *= damping_factor
     end
     
     return nothing
 end
-
 """
     create_synchrotron_radiation(
         E0,

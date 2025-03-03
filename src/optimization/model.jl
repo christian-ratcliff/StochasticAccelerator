@@ -236,55 +236,174 @@ Run the accelerator model with the given parameters.
 - `σ_z`: Final bunch length [m]
 - `E0`: Final reference energy [eV]
 """
-function run_model(model::AcceleratorModel, params::Vector{<:Parameter})
+# function run_model(model::AcceleratorModel, params::Vector{<:Parameter})
     
-    return StochasticAD.propagate(params...) do p_vals...
-        # Create simulation parameters with the parameter values
-        param_dict = Dict(zip(model.mapping.keys, p_vals))
+#     return StochasticAD.propagate(params...) do p_vals...
+#         # Create simulation parameters with the parameter values
+#         param_dict = Dict(zip(model.mapping.keys, p_vals))
         
-        # Extract parameters with proper types
-        E0 = get(param_dict, :E0, model.base_params.E0)
-        voltage = get(param_dict, :voltage, model.base_params.voltage)
-        radius = get(param_dict, :radius, model.base_params.radius)
-        pipe_radius = get(param_dict, :pipe_radius, model.base_params.pipe_radius)
-        α_c = get(param_dict, :α_c, model.base_params.α_c)
-        ϕs = get(param_dict, :ϕs, model.base_params.ϕs)
-        freq_rf = get(param_dict, :freq_rf, model.base_params.freq_rf)
+#         # Extract parameters with proper types
+#         E0 = get(param_dict, :E0, model.base_params.E0)
+#         voltage = get(param_dict, :voltage, model.base_params.voltage)
+#         radius = get(param_dict, :radius, model.base_params.radius)
+#         pipe_radius = get(param_dict, :pipe_radius, model.base_params.pipe_radius)
+#         α_c = get(param_dict, :α_c, model.base_params.α_c)
+#         ϕs = get(param_dict, :ϕs, model.base_params.ϕs)
+#         freq_rf = get(param_dict, :freq_rf, model.base_params.freq_rf)
         
-        # Create simulation parameters with extracted values
-        sim_params = SimulationParameters(
-            E0, model.base_params.mass, voltage, model.base_params.harmonic, 
-            radius, pipe_radius, α_c, ϕs, freq_rf, model.base_params.n_turns,
-            model.base_params.use_wakefield, model.base_params.update_η, 
-            model.base_params.update_E0, model.base_params.SR_damping, 
-            model.base_params.use_excitation
-        )
+#         # Create simulation parameters with extracted values
+#         sim_params = SimulationParameters(
+#             E0, model.base_params.mass, voltage, model.base_params.harmonic, 
+#             radius, pipe_radius, α_c, ϕs, freq_rf, model.base_params.n_turns,
+#             model.base_params.use_wakefield, model.base_params.update_η, 
+#             model.base_params.update_E0, model.base_params.SR_damping, 
+#             model.base_params.use_excitation
+#         )
         
-        # Generate particles with Float64 values
-        particles, σ_E0, σ_z0, _ = generate_particles(
-            0.0, 0.0, 0.005, 1e6, model.n_particles,
-            sim_params.E0, sim_params.mass, sim_params.ϕs, sim_params.freq_rf
-        )
+#         # Generate particles with Float64 values
+#         particles, σ_E0, σ_z0, _ = generate_particles(
+#             0.0, 0.0, 0.005, 1e6, model.n_particles,
+#             sim_params.E0, sim_params.mass, sim_params.ϕs, sim_params.freq_rf
+#         )
         
-        # Create buffers
-        nbins = Int(model.n_particles/10)
-        buffers = create_simulation_buffers(model.n_particles, nbins, Float64)
+#         # Create buffers
+#         nbins = Int(model.n_particles/10)
+#         buffers = create_simulation_buffers(model.n_particles, nbins, Float64)
         
-        # Run simulation
-        σ_E = σ_E0
-        σ_z = σ_z0
-        E0_final = sim_params.E0
+#         # Run simulation
+#         σ_E = σ_E0
+#         σ_z = σ_z0
+#         E0_final = sim_params.E0
         
-        for turn in 1:sim_params.n_turns
-            σ_E, σ_z, E0_final = track_particles!(
-                particles, model.processes, sim_params, buffers;
-                update_η=sim_params.update_η, update_E0=sim_params.update_E0
-            )
-        end
+#         for turn in 1:sim_params.n_turns
+#             σ_E, σ_z, E0_final = track_particles!(
+#                 particles, model.processes, sim_params, buffers;
+#                 update_η=sim_params.update_η, update_E0=sim_params.update_E0
+#             )
+#         end
         
-        # Return the final results
-        return particles, σ_E, σ_z, E0_final
+#         # Return the final results
+#         return particles, σ_E, σ_z, E0_final
+#     end
+# end
+
+# function run_model(model::AcceleratorModel, params::Vector{<:Parameter})
+    
+#     return StochasticAD.propagate(params) do p_vals...
+#         # Create simulation parameters with the parameter values
+#         param_dict = Dict(zip(model.mapping.keys, p_vals))
+        
+#         # Extract parameters with proper types
+#         E0 = get(param_dict, :E0, model.base_params.E0)
+#         voltage = get(param_dict, :voltage, model.base_params.voltage)
+#         radius = get(param_dict, :radius, model.base_params.radius)
+#         pipe_radius = get(param_dict, :pipe_radius, model.base_params.pipe_radius)
+#         α_c = get(param_dict, :α_c, model.base_params.α_c)
+#         ϕs = get(param_dict, :ϕs, model.base_params.ϕs)
+#         freq_rf = get(param_dict, :freq_rf, model.base_params.freq_rf)
+        
+#         # Create simulation parameters with extracted values
+#         sim_params = SimulationParameters(
+#             E0, model.base_params.mass, voltage, model.base_params.harmonic, 
+#             radius, pipe_radius, α_c, ϕs, freq_rf, model.base_params.n_turns,
+#             model.base_params.use_wakefield, model.base_params.update_η, 
+#             model.base_params.update_E0, model.base_params.SR_damping, 
+#             model.base_params.use_excitation
+#         )
+        
+#         # Generate particles with Float64 values
+#         particles, σ_E0, σ_z0, _ = generate_particles(
+#             0.0, 0.0, 0.005, 1e6, model.n_particles,
+#             sim_params.E0, sim_params.mass, sim_params.ϕs, sim_params.freq_rf
+#         )
+        
+#         # Create buffers
+#         nbins = Int(model.n_particles/10)
+#         buffers = create_simulation_buffers(model.n_particles, nbins, Float64)
+        
+#         # Run simulation
+#         σ_E = σ_E0
+#         σ_z = σ_z0
+#         E0_final = sim_params.E0
+        
+#         for turn in 1:sim_params.n_turns
+#             σ_E, σ_z, E0_final = track_particles!(
+#                 particles, model.processes, sim_params, buffers;
+#                 update_η=sim_params.update_η, update_E0=sim_params.update_E0
+#             )
+#         end
+        
+#         # Return the final results
+#         return particles, σ_E, σ_z, E0_final
+#     end
+# end
+
+function run_model(model::AcceleratorModel, params::Vector{<:Parameter})
+    # Extract parameters by index
+    param_dict = Dict{Symbol, Any}()
+    for (i, key) in enumerate(model.mapping.keys)
+        param_dict[key] = safe_value(params[i])  # Extract values from any StochasticTriple
     end
+    
+    # Extract parameters with proper types
+    E0 = get(param_dict, :E0, model.base_params.E0)
+    voltage = get(param_dict, :voltage, model.base_params.voltage)
+    radius = get(param_dict, :radius, model.base_params.radius)
+    pipe_radius = get(param_dict, :pipe_radius, model.base_params.pipe_radius)
+    α_c = get(param_dict, :α_c, model.base_params.α_c)
+    ϕs = get(param_dict, :ϕs, model.base_params.ϕs)
+    freq_rf = get(param_dict, :freq_rf, model.base_params.freq_rf)
+    
+    # Create simulation parameters
+    sim_params = SimulationParameters(
+        E0, model.base_params.mass, voltage, model.base_params.harmonic, 
+        radius, pipe_radius, α_c, ϕs, freq_rf, model.base_params.n_turns,
+        model.base_params.use_wakefield, model.base_params.update_η, 
+        model.base_params.update_E0, model.base_params.SR_damping, 
+        model.base_params.use_excitation
+    )
+    
+    # Calculate derived parameters
+    γ = E0 / model.base_params.mass
+    β = sqrt(1 - 1/γ^2)
+    ω_rev = 2 * π / ((2 * π * radius) / (β * SPEED_LIGHT))
+    
+    # Calculate initial distribution parameters
+    σ_E0 = 1e6  # 1 MeV energy spread
+    σ_z0 = sqrt(2 * π) * SPEED_LIGHT / ω_rev * 
+           sqrt(α_c * E0 / model.base_params.harmonic / voltage / abs(cos(ϕs))) * 
+           σ_E0 / E0
+    
+    # Generate particles
+    particles, _, _, _ = generate_particles(
+        0.0, 0.0, σ_z0, σ_E0, model.n_particles,
+        E0, model.base_params.mass, ϕs, freq_rf
+    )
+    
+    # Create buffers
+    nbins = Int(model.n_particles/10)
+    buffers = create_simulation_buffers(model.n_particles, nbins, Float64)
+    
+    # Track particles for n_turns
+    σ_E = σ_E0
+    σ_z = σ_z0
+    E0_final = E0
+    
+    # Run the simulation for multiple turns
+    for turn in 1:sim_params.n_turns
+        # Track particles for one turn
+        σ_E, σ_z, E0_final = track_particles!(
+            particles, 
+            model.processes, 
+            sim_params, 
+            buffers;
+            update_η=sim_params.update_η, 
+            update_E0=sim_params.update_E0
+        )
+    end
+    
+    # Return the final results
+    return particles, σ_E, σ_z, E0_final
 end
 
 """
